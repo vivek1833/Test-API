@@ -1,9 +1,9 @@
 const express = require('express');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
 const env = require("dotenv").config();
 const newuser = require('./models/newuser');
+const Post = require('./models/post');
 
 const app = express();
 const port = process.env.PORT || 8000;
@@ -13,6 +13,7 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: false }));
 mongoose.set('strictQuery', false); // to not show warning
 
+
 mongoose.connect(conn, {
     useNewUrlParser: true,
     useUnifiedTopology: true,
@@ -20,10 +21,195 @@ mongoose.connect(conn, {
     console.log("Database Connected");
 }).catch((err) => console.log(err));
 
-app.get('', (req, res) => {
-    res.status(200).send('Test API is running');
+app.get("/", (req, res) => {
+    res.json({
+        Message: "Welcome to Test API",
+        Status: "Success",
+    })
 });
 
+// CRUD operations on social media post
+// Creating a post
+app.post('/createpost', async (req, res) => {
+    try {
+        const { title, body, image } = req.body;
+
+        if (!title || !body || !image) {
+            return res.status(422).json({ error: "Please fill all the fields" });
+        }
+        else {
+
+            // if image already exists
+            const alreadypost = await Post.findOne({ image: image });
+
+            // Checking if user exists
+            if (alreadypost) {
+                return res.status(422).json({ error: "Post Already Exists" });
+            }
+            else {
+                const post = new Post({
+                    title: title,
+                    body: body,
+                    image: image,
+                    like: 0,
+                    comments: [],
+                })
+
+                const createdpost = await post.save();
+                return res.status(200).json({
+                    Message: "Successfully Created",
+                    Title: createdpost.title,
+                    Body: createdpost.body,
+                    Image: createdpost.image,
+                    Like: createdpost.like,
+                    Comments: createdpost.comments,
+                });
+            }
+        }
+
+    } catch (err) {
+        res.status(500).json(err)
+    }
+});
+
+// Reading all posts
+app.get('/allposts', async (req, res) => {
+    try {
+        const allposts = await Post.find();
+        return res.status(200).json(allposts);
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// Reading a post
+app.get('/readpost/:id', async (req, res) => {
+    try {
+        const image = req.params.id;
+        const post = await Post.find({ image });
+
+        if (post === null) {
+            return res.status(422).json({ error: "Post Not Found" });
+        }
+        else {
+            return res.status(200).json(post);
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// Updating a post
+app.put('/updatepost/:id', async (req, res) => {
+    try {
+        const image = req.params.id;
+        const { title, body } = req.body;
+
+        if (!title || !body) {
+            return res.status(422).json({ error: "Please fill all the fields" });
+        }
+        else {
+            const post = await Post.findOneAndUpdate({ image }, {
+                title: title,
+                body: body
+            }, {
+                new: true,
+            });
+
+            if (!post) {
+                return res.status(422).json({ error: "Post Not Found" });
+            }
+            else {
+                return res.status(200).json({
+                    Message: "Successfully Updated",
+                    Title: post.title,
+                    Body: post.body,
+                    Image: post.image,
+                });
+            }
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// Deleting a post
+app.delete('/deletepost/:id', async (req, res) => {
+    try {
+        const image = req.params.id;
+        const post = await Post.findOneAndDelete(image);
+
+        if (!post) {
+            return res.status(422).json({ error: "Post Not Found" });
+        }
+        else {
+            return res.status(200).json({
+                Message: "Successfully Deleted",
+                Title: post.title,
+                Body: post.body,
+                Image: post.image,
+            });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// Like a post
+app.put('/likepost/:id', async (req, res) => {
+    try {
+        const image = req.params.id;
+        const post = await Post.findOne({ image });
+
+        if (!post) {
+            return res.status(422).json({ error: "Post Not Found" });
+        }
+        else {
+            post.like = post.like + 1;
+            post.save();
+
+            return res.status(200).json({
+                Message: "Successfully Liked",
+                Title: post.title,
+                Body: post.body,
+                Image: post.image,
+                Like: post.like,
+            });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// Comment on a post
+app.put('/commentpost/:id', async (req, res) => {
+    try {
+        const image = req.params.id;
+        const { comment } = req.body;
+
+        const post = await Post.findOne({ image });
+
+        if (!comment) {
+            return res.status(422).json({ error: "Please fill all the fields" });
+        }
+        else {
+            post.comments = post.comments.concat({ comment });
+            post.save();
+            return res.status(200).json({
+                Message: "Successfully Commented",
+                Title: post.title,
+                Body: post.body,
+                Image: post.image,
+                Like: post.like,
+                Comments: post.comments,
+            });
+        }
+    } catch (err) {
+        res.status(500).json(err);
+    }
+});
+
+// Registering a user
 app.post('/register', async (req, res) => {
     try {
         const { username, email, password } = req.body;
@@ -35,7 +221,6 @@ app.post('/register', async (req, res) => {
             // Checking if user already exists
             const alreadyuser = await newuser.findOne({ username: username });
 
-            // Checking if user exists
             if (alreadyuser) {
                 return res.status(422).json({ error: "User Already Exists" });
             }
@@ -66,6 +251,7 @@ app.post('/register', async (req, res) => {
     }
 });
 
+// Logging in a user
 app.post('/login', async (req, res) => {
     try {
         const { username, password } = req.body;
@@ -146,5 +332,5 @@ app.patch("/forgot-password", async (req, res) => {
 });
 
 app.listen(port, () => {
-    console.log(`Running on https://localhost:${port}`);
+    console.log('Server is running');
 });
