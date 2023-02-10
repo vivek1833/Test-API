@@ -2,6 +2,7 @@ const express = require('express');
 const mongoose = require('mongoose');
 const jwt = require('jsonwebtoken');
 const env = require("dotenv").config();
+const bcrypt = require('bcryptjs');
 const newuser = require('./models/newuser');
 const Post = require('./models/post');
 
@@ -29,7 +30,7 @@ app.get("/", (req, res) => {
 });
 
 // CRUD operations on social media post
-// Creating a post
+// Creating a post with jwt authentication.
 app.post('/createpost', async (req, res) => {
     try {
         const { title, body, image } = req.body;
@@ -55,6 +56,11 @@ app.post('/createpost', async (req, res) => {
                     comments: [],
                 })
 
+                // jwt authenticaiton
+                const token = jwt.sign({ _id: req.body._id }, process.env.SecretKey);
+                post.tokens = post.tokens.concat({ token: token });
+
+
                 const createdpost = await post.save();
                 return res.status(200).json({
                     Message: "Successfully Created",
@@ -63,10 +69,10 @@ app.post('/createpost', async (req, res) => {
                     Image: createdpost.image,
                     Like: createdpost.like,
                     Comments: createdpost.comments,
+                    Token: token,
                 });
             }
         }
-
     } catch (err) {
         res.status(500).json(err)
     }
@@ -76,7 +82,13 @@ app.post('/createpost', async (req, res) => {
 app.get('/allposts', async (req, res) => {
     try {
         const allposts = await Post.find();
-        return res.status(200).json(allposts);
+
+        if (allposts.length === 0) {
+            return res.status(422).json({ error: "No Posts Found" });
+        }
+        else {
+            return res.status(200).json(allposts);
+        }
     } catch (err) {
         res.status(500).json(err);
     }
@@ -116,6 +128,10 @@ app.put('/updatepost/:id', async (req, res) => {
                 new: true,
             });
 
+            // jwt authenticaiton
+            const token = jwt.sign({ _id: req.body._id }, process.env.SecretKey);
+            post.tokens = post.tokens.concat({ token: token });
+
             if (!post) {
                 return res.status(422).json({ error: "Post Not Found" });
             }
@@ -125,11 +141,12 @@ app.put('/updatepost/:id', async (req, res) => {
                     Title: post.title,
                     Body: post.body,
                     Image: post.image,
+                    Token: token,
                 });
             }
         }
     } catch (err) {
-        res.status(500).json(err);
+        res.status(500).json({ "error": "Post not found" });
     }
 });
 
@@ -143,11 +160,16 @@ app.delete('/deletepost/:id', async (req, res) => {
             return res.status(422).json({ error: "Post Not Found" });
         }
         else {
+            // jwt authenticaiton
+            const token = jwt.sign({ _id: req.body._id }, process.env.SecretKey);
+            post.tokens = post.tokens.concat({ token: token });
+
             return res.status(200).json({
                 Message: "Successfully Deleted",
                 Title: post.title,
                 Body: post.body,
                 Image: post.image,
+                Token: token,
             });
         }
     } catch (err) {
@@ -165,6 +187,10 @@ app.put('/likepost/:id', async (req, res) => {
             return res.status(422).json({ error: "Post Not Found" });
         }
         else {
+            // jwt authenticaiton
+            const token = jwt.sign({ _id: req.body._id }, process.env.SecretKey);
+            post.tokens = post.tokens.concat({ token: token });
+
             post.like = post.like + 1;
             post.save();
 
@@ -174,6 +200,8 @@ app.put('/likepost/:id', async (req, res) => {
                 Body: post.body,
                 Image: post.image,
                 Like: post.like,
+                Comments: post.comments,
+                Token: token,
             });
         }
     } catch (err) {
@@ -193,6 +221,10 @@ app.put('/commentpost/:id', async (req, res) => {
             return res.status(422).json({ error: "Please fill all the fields" });
         }
         else {
+            // jwt authenticaiton
+            const token = jwt.sign({ _id: req.body._id }, process.env.SecretKey);
+            post.tokens = post.tokens.concat({ token: token });
+
             post.comments = post.comments.concat({ comment });
             post.save();
             return res.status(200).json({
@@ -202,6 +234,7 @@ app.put('/commentpost/:id', async (req, res) => {
                 Image: post.image,
                 Like: post.like,
                 Comments: post.comments,
+                Token: token,
             });
         }
     } catch (err) {
@@ -218,6 +251,9 @@ app.post('/register', async (req, res) => {
             return res.status(422).json({ error: "Please fill all the fields" });
         }
         else {
+            // Encrypting password
+            const hashpassword = await bcrypt.hash(password, 10);
+
             // Checking if user already exists
             const alreadyuser = await newuser.findOne({ username: username });
 
@@ -229,7 +265,7 @@ app.post('/register', async (req, res) => {
             const user = new newuser({
                 username: username,
                 email: email,
-                password: password,
+                password: hashpassword,
             })
 
             // Web token generation
@@ -267,9 +303,11 @@ app.post('/login', async (req, res) => {
             if (!user) {
                 return res.status(422).json({ error: "Invalid Credentials" });
             }
+            // Encrypting password
+            const isMatch = await bcrypt.compare(password, user.password);
 
             // Checking if password is correct
-            if (password !== user.password) {
+            if (!isMatch) {
                 return res.status(422).json({ error: "Invalid Credentials" });
             }
 
