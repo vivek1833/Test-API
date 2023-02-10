@@ -1,6 +1,6 @@
 ## Running on: https://test-api.up.railway.app/
 
-### This test API has three functionalities:
+### This test API has following functionalities:
 
 <hr>
 
@@ -31,7 +31,7 @@ No need to provide anything.
 
 #### 6. Get Particular Post: https://test-api.up.railway.app/readpost/POST_IMAGE/
 ```bash
-"POST_IMAGE" is the image provided during creation of post. This image should be unique for every post.
+"POST_IMAGE" is the image provided during creation of post.
 ```
 
 #### 7. Update a Post: https://test-api.up.railway.app/updatepost/POST_IMAGE/
